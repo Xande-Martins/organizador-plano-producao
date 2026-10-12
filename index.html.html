@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Acompanhamento de Produção</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .excel-table th, .excel-table td {
+            border: 1px solid #cbd5e1;
+            padding: 0;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .excel-table th {
+            background-color: #f8fafc;
+            color: #334155;
+            font-weight: 600;
+            text-align: center;
+            padding: 6px 10px;
+            user-select: none;
+        }
+        .excel-input {
+            width: 100%;
+            height: 100%;
+            padding: 6px 8px;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-size: 12px;
+            font-family: inherit;
+        }
+        .excel-input:focus {
+            background: #eff6ff !important;
+            outline: 2px solid #3b82f6 !important;
+            outline-offset: -2px;
+            z-index: 10;
+            position: relative;
+        }
+        /* Colunas de dias largas o suficiente para "1.800" sem cortar */
+        .col-dia { min-width: 72px; }
+        .col-dia .excel-input { min-width: 72px; }
+        /* Separador visual entre dias no consolidado */
+        .linha-novo-dia td { border-top: 2px solid #94a3b8 !important; }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+    <header class="bg-slate-900 text-white shadow-md z-20">
+        <div class="max-w-7xl mx-auto px-4 py-3.5 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 p-2.5 rounded-xl shadow-inner text-white">
+                    <i class="fa-solid fa-table text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-base font-bold tracking-tight">LogiFlow Produção & Acompanhamento</h1>
+                    <p class="text-xs text-slate-400">Conversão de Plano Horizontal para Consolidado Vertical</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+                <div class="flex items-center space-x-1.5 bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
+                    <label for="inputMesAno" class="text-slate-400 font-medium">Mês/Ano:</label>
+                    <input type="month" id="inputMesAno" value="2026-10" class="bg-transparent text-white font-semibold focus:outline-none cursor-pointer">
+                </div>
+                <button onclick="carregarExemplo()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition-all shadow-sm flex items-center space-x-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Carregar Exemplo</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <nav class="max-w-7xl w-full mx-auto px-4 pt-6 pb-2">
+        <div class="flex space-x-2 border-b border-slate-200">
+            <button onclick="mudarAba('horizontal')" id="tabBtnHorizontal" class="py-2.5 px-5 font-semibold text-xs sm:text-sm rounded-t-xl transition-all flex items-center space-x-2 bg-white text-indigo-600 border-t-2 border-indigo-600 shadow-sm">
+                <i class="fa-solid fa-table-cells"></i>
+                <span>1. Plano de Produção (Horizontal)</span>
+            </button>
+            <button onclick="mudarAba('vertical')" id="tabBtnVertical" class="py-2.5 px-5 font-semibold text-xs sm:text-sm rounded-t-xl transition-all flex items-center space-x-2 bg-slate-200/60 text-slate-600 hover:bg-slate-200">
+                <i class="fa-solid fa-list-check"></i>
+                <span>2. Acompanhamento Consolidado (Vertical)</span>
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 pb-8 flex flex-col">
+        
+        <div id="viewHorizontal" class="flex-1 flex flex-col bg-white rounded-b-2xl rounded-r-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+            
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                    <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Grade de Entrada (Colagem do Excel Habilitada)</h2>
+                    <p class="text-xs text-slate-500">Cole (<kbd class="px-1 py-0.5 bg-slate-200 rounded text-slate-800 font-mono">Ctrl+V</kbd>) dados copiados do Excel nas células. As colunas e linhas serão distribuídas automaticamente!</p>
+                </div>
+                
+                <div class="flex items-center space-x-2">
+                    <button onclick="adicionarLinhaHorizontal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium px-3 py-2 rounded-xl transition-all border border-slate-200 flex items-center space-x-1">
+                        <i class="fa-solid fa-plus text-indigo-600"></i>
+                        <span>Adicionar Linha</span>
+                    </button>
+                    <button onclick="adicionarColunaDia()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium px-3 py-2 rounded-xl transition-all border border-slate-200 flex items-center space-x-1">
+                        <i class="fa-solid fa-calendar-plus text-indigo-600"></i>
+                        <span>Adicionar Dia</span>
+                    </button>
+                    <button onclick="limparTabela()" class="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium px-3 py-2 rounded-xl transition-all border border-red-200 flex items-center space-x-1">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>Limpar Grade</span>
+                    </button>
+                    <button onclick="processarTransformacao(); mudarAba('vertical');" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-sm flex items-center space-x-1.5">
+                        <i class="fa-solid fa-gears"></i>
+                        <span>Transformar Plano</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Spreadsheet Grid Table Container -->
+            <div class="flex-1 overflow-auto border border-slate-200 rounded-xl relative max-h-[550px]" id="containerGridHorizontal">
+                <table class="excel-table w-full border-collapse" id="tabelaHorizontal">
+                    <thead id="theadHorizontal"></thead>
+                    <tbody id="tbodyHorizontal"></tbody>
+                </table>
+            </div>
+
+            <div class="flex justify-between items-center text-xs text-slate-400">
+                <span id="infoGridStatus">Grade pronta para edição e colagem do Excel.</span>
+                <span class="text-emerald-600 font-medium"><i class="fa-solid fa-circle-check"></i> Suporte total a Colagem Tabulada (Ctrl+V)</span>
+            </div>
+        </div>
+
+        <div id="viewVertical" class="hidden flex-1 flex flex-col bg-white rounded-b-2xl rounded-r-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+            
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                    <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Acompanhamento Consolidado (Vertical)</h2>
+                    <p class="text-xs text-slate-500" id="statusResultadoVertical">Ordenado por Data e sequência de produção.</p>
+                </div>
+                
+                <div class="flex items-center space-x-2">
+                    <button onclick="exportarCSV()" id="btnExportar" disabled class="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition-all flex items-center space-x-1.5 shadow-sm">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>Exportar para Excel (CSV)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Vertical Table Container -->
+            <div class="flex-1 overflow-auto border border-slate-200 rounded-xl relative max-h-[550px]">
+                <table class="excel-table w-full border-collapse">
+                    <thead>
+                        <tr>
+                            <th class="p-3 w-32 cursor-pointer hover:bg-slate-200 transition-colors select-none" onclick="ordenarVerticalHeader('data')" title="Ordenar por Data mantendo a sequência de produção">
+                                <div class="flex items-center justify-center space-x-1">
+                                    <span>Data</span>
+                                    <i id="sortIconData" class="fa-solid fa-sort-up text-indigo-600 text-xs font-bold"></i>
+                                </div>
+                            </th>
+                            <th class="p-3 w-36 cursor-pointer hover:bg-slate-200 transition-colors select-none" onclick="ordenarVerticalHeader('codigo')" title="Ordenar por Código (consulta)">
+                                <div class="flex items-center justify-center space-x-1">
+                                    <span>Código</span>
+                                    <i id="sortIconCodigo" class="fa-solid fa-sort text-slate-400 text-xs"></i>
+                                </div>
+                            </th>
+                            <th class="p-3 text-left">Descrição do Modelo</th>
+                            <th class="p-3 w-32 text-right">Necessidade</th>
+                            <th class="p-3 w-32 text-right">Enviado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyVertical" class="bg-white divide-y divide-slate-100">
+                        <tr>
+                            <td colspan="5" class="p-10 text-center text-slate-400">
+                                <div class="flex flex-col items-center justify-center space-y-2">
+                                    <i class="fa-solid fa-table-list text-3xl text-slate-300"></i>
+                                    <p class="text-sm">Nenhum dado consolidado gerado ainda.</p>
+                                    <p class="text-xs text-slate-400">Vá para a aba 1, preencha ou cole seus dados e clique em "Transformar Plano".</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Footer Stats -->
+            <div class="flex flex-wrap justify-between items-center text-xs text-slate-600 pt-2 border-t border-slate-100">
+                <div id="statTotalLinhas">Total de Registros: 0</div>
+                <div id="statTotalPecas" class="font-bold text-indigo-600">Soma Geral Necessidade: 0 pçs</div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        let diasQuantidade = 16;
+        let dadosHorizontal = [];
+
+        const DADOS_EXEMPLO = [
+            { codigo: "5615-03", modelo: "MICRO-ONDAS MO-01-21-B 127V/60HZ", dias: {16: "1.800"} },
+            { codigo: "5616-03", modelo: "MICRO-ONDAS MO-01-21-W 127V/60HZ .", dias: {8: "1.440"} },
+            { codigo: "5619-01", modelo: "MICRO-ONDAS MO-01-21-E 127V/60HZ", dias: {7: "220", 8: "1.800", 11: "1.800", 12: "1.800", 13: "1.800"} },
+            { codigo: "5616-04", modelo: "MICRO-ONDAS MO-01-21-W 220V/60HZ", dias: {6: "970", 7: "1.800", 8: "1.800"} },
+            { codigo: "5615-04", modelo: "MICRO-ONDAS MO-01-21-B 220V/60HZ .", dias: {1: "1.350", 2: "1.800", 5: "690"} },
+            { codigo: "5615-03", modelo: "MICRO-ONDAS MO-01-21-B 127V/60HZ", dias: {15: "910", 16: "1.710"} },
+            { codigo: "5616-03", modelo: "MICRO-ONDAS MO-01-21-W 127V/60HZ .", dias: {7: "1.560"} },
+            { codigo: "5619-01", modelo: "MICRO-ONDAS MO-01-21-E 127V/60HZ", dias: {8: "1.710", 9: "1.710", 12: "1.710", 13: "1.710", 14: "640"} },
+            { codigo: "5616-04", modelo: "MICRO-ONDAS MO-01-21-W 220V/60HZ", dias: {6: "1.710", 7: "1.710", 8: "10"} },
+            { codigo: "5615-04", modelo: "MICRO-ONDAS MO-01-21-B 220V/60HZ .", dias: {1: "1.710", 2: "1.710"} }
+        ];
+
+        function clonarExemplo() {
+            return DADOS_EXEMPLO.map(r => ({ codigo: r.codigo, modelo: r.modelo, dias: { ...r.dias } }));
+        }
+
+        dadosHorizontal = clonarExemplo();
+
+        let dadosProcessadosVertical = [];
+
+        // Modo de ordenação:
+        //  'sequencia' -> 1º Data (crescente/decrescente) + 2º sequência de produção
+        //                 (códigos iguais em dias seguidos ficam colados na virada do dia)
+        //  'codigo'    -> 1º Código + 2º Data (apenas para consulta)
+        let modoOrdenacao = 'sequencia';
+        let direcaoOrdenacao = 'asc';
+
+        function mudarAba(aba) {
+            const btnH = document.getElementById('tabBtnHorizontal');
+            const btnV = document.getElementById('tabBtnVertical');
+            const viewH = document.getElementById('viewHorizontal');
+            const viewV = document.getElementById('viewVertical');
+
+            if (aba === 'horizontal') {
+                btnH.className = "py-2.5 px-5 font-semibold text-xs sm:text-sm rounded-t-xl transition-all flex items-center space-x-2 bg-white text-indigo-600 border-t-2 border-indigo-600 shadow-sm";
+                btnV.className = "py-2.5 px-5 font-semibold text-xs sm:text-sm rounded-t-xl transition-all flex items-center space-x-2 bg-slate-200/60 text-slate-600 hover:bg-slate-200";
+                viewH.classList.remove('hidden');
+                viewV.classList.add('hidden');
+            } else {
+                btnV.className = "py-2.5 px-5 font-semibold text-xs sm:text-sm rounded-t-xl transition-all flex items-center space-x-2 bg-white text-indigo-600 border-t-2 border-indigo-600 shadow-sm";
+                btnH.className = "py-2.5 px-5 font-semibold text-xs sm:text-sm rounded-t-xl transition-all flex items-center space-x-2 bg-slate-200/60 text-slate-600 hover:bg-slate-200";
+                viewV.classList.remove('hidden');
+                viewH.classList.add('hidden');
+            }
+        }
+
+        function carregarExemplo() {
+            diasQuantidade = 16;
+            dadosHorizontal = clonarExemplo();
+            renderizarGridHorizontal();
+            processarTransformacao();
+        }
+
+        function limparTabela() {
+            dadosHorizontal = [
+                { codigo: "", modelo: "", dias: {} },
+                { codigo: "", modelo: "", dias: {} },
+                { codigo: "", modelo: "", dias: {} },
+                { codigo: "", modelo: "", dias: {} },
+                { codigo: "", modelo: "", dias: {} }
+            ];
+            renderizarGridHorizontal();
+        }
+
+        function renderizarGridHorizontal() {
+            const thead = document.getElementById('theadHorizontal');
+            const tbody = document.getElementById('tbodyHorizontal');
+
+            let htmlHead = `<tr>
+                <th class="w-12">#</th>
+                <th class="w-32">COD MODEL</th>
+                <th class="text-left min-w-[280px]">MODELO</th>`;
+            
+            for (let d = 1; d <= diasQuantidade; d++) {
+                htmlHead += `<th class="col-dia">${d}</th>`;
+            }
+            htmlHead += `<th class="w-12">Ação</th></tr>`;
+            thead.innerHTML = htmlHead;
+
+            let htmlBody = '';
+            dadosHorizontal.forEach((row, rowIndex) => {
+                htmlBody += `<tr class="hover:bg-slate-50">
+                    <td class="text-center font-semibold text-slate-400 bg-slate-50 select-none">${rowIndex + 1}</td>
+                    <td><input type="text" data-row="${rowIndex}" data-col="0" class="excel-input font-mono font-semibold text-indigo-700" value="${row.codigo || ''}" onchange="atualizarCelulaHorizontal(${rowIndex}, 'codigo', this.value)"></td>
+                    <td><input type="text" data-row="${rowIndex}" data-col="1" class="excel-input text-left" value="${row.modelo || ''}" onchange="atualizarCelulaHorizontal(${rowIndex}, 'modelo', this.value)"></td>`;
+                
+                for (let d = 1; d <= diasQuantidade; d++) {
+                    const val = (row.dias && row.dias[d]) ? row.dias[d] : '';
+                    htmlBody += `<td class="col-dia"><input type="text" data-row="${rowIndex}" data-col="${d + 1}" class="excel-input text-right font-mono" value="${val}" onchange="atualizarDiaHorizontal(${rowIndex}, ${d}, this.value)"></td>`;
+                }
+
+                htmlBody += `<td class="text-center">
+                    <button onclick="removerLinhaHorizontal(${rowIndex})" class="text-red-400 hover:text-red-600 p-1 transition-colors" title="Remover linha">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                </td></tr>`;
+            });
+            tbody.innerHTML = htmlBody;
+            document.getElementById('infoGridStatus').innerText = `Total de linhas na grade: ${dadosHorizontal.length} | Dias monitorados: ${diasQuantidade}`;
+
+            anexarEventosPaste();
+        }
+
+        function anexarEventosPaste() {
+            const inputs = document.querySelectorAll('#tbodyHorizontal .excel-input');
+            inputs.forEach(input => {
+                input.addEventListener('paste', handleExcelPaste);
+            });
+        }
+
+        function handleExcelPaste(e) {
+            e.preventDefault();
+
+            const clipboardData = (e.clipboardData || window.clipboardData).getData('text');
+            if (!clipboardData) return;
+
+            const startRow = parseInt(this.getAttribute('data-row'), 10);
+            const startCol = parseInt(this.getAttribute('data-col'), 10);
+
+            const rows = clipboardData.split(/\r\n|\n|\r/);
+            if (rows.length > 0 && rows[rows.length - 1] === '') {
+                rows.pop();
+            }
+
+            rows.forEach((rowText, rIndex) => {
+                const targetRow = startRow + rIndex;
+
+                while (targetRow >= dadosHorizontal.length) {
+                    dadosHorizontal.push({ codigo: "", modelo: "", dias: {} });
+                }
+
+                const cols = rowText.split('\t');
+
+                cols.forEach((cellVal, cIndex) => {
+                    const targetCol = startCol + cIndex;
+                    const valLimpo = cellVal.trim();
+
+                    if (targetCol === 0) {
+                        dadosHorizontal[targetRow].codigo = valLimpo;
+                    } else if (targetCol === 1) {
+                        dadosHorizontal[targetRow].modelo = valLimpo;
+                    } else {
+                        const diaNum = targetCol - 1;
+                        if (diaNum > diasQuantidade) {
+                            diasQuantidade = diaNum;
+                        }
+                        if (!dadosHorizontal[targetRow].dias) {
+                            dadosHorizontal[targetRow].dias = {};
+                        }
+                        if (valLimpo === '') {
+                            delete dadosHorizontal[targetRow].dias[diaNum];
+                        } else {
+                            dadosHorizontal[targetRow].dias[diaNum] = valLimpo;
+                        }
+                    }
+                });
+            });
+
+            renderizarGridHorizontal();
+        }
+
+        function atualizarCelulaHorizontal(rowIndex, campo, valor) {
+            dadosHorizontal[rowIndex][campo] = valor.trim();
+        }
+
+        function atualizarDiaHorizontal(rowIndex, dia, valor) {
+            if (!dadosHorizontal[rowIndex].dias) dadosHorizontal[rowIndex].dias = {};
+            if (valor.trim() === '') {
+                delete dadosHorizontal[rowIndex].dias[dia];
+            } else {
+                dadosHorizontal[rowIndex].dias[dia] = valor.trim();
+            }
+        }
+
+        function adicionarLinhaHorizontal() {
+            dadosHorizontal.push({ codigo: "", modelo: "", dias: {} });
+            renderizarGridHorizontal();
+        }
+
+        function adicionarColunaDia() {
+            diasQuantidade++;
+            renderizarGridHorizontal();
+        }
+
+        function removerLinhaHorizontal(rowIndex) {
+            dadosHorizontal.splice(rowIndex, 1);
+            renderizarGridHorizontal();
+        }
+
+        function processarTransformacao() {
+            const mesAnoVal = document.getElementById('inputMesAno').value;
+            const [anoStr, mesStr] = mesAnoVal.split('-');
+            const ano = parseInt(anoStr, 10);
+            const mesIndex = parseInt(mesStr, 10) - 1;
+
+            const mapaConsolidado = new Map(); // chave: "YYYY-MM-DD_codigo"
+
+            for (let r = 0; r < dadosHorizontal.length; r++) {
+                const row = dadosHorizontal[r];
+                const codigo = (row.codigo || '').trim();
+                const modelo = (row.modelo || '').trim();
+
+                if (!codigo) continue;
+
+                for (let d = 1; d <= diasQuantidade; d++) {
+                    const valStr = row.dias && row.dias[d];
+                    if (valStr !== undefined && valStr !== '') {
+                        let cleanVal = String(valStr).replace(/\./g, '').replace(',', '.');
+                        let qtd = parseFloat(cleanVal);
+
+                        if (!isNaN(qtd) && qtd > 0) {
+                            const dataObj = new Date(ano, mesIndex, d);
+                            const diaSemana = dataObj.getDay();
+
+                            if (diaSemana === 0 || diaSemana === 6) continue; // Ignora fins de semana
+
+                            const dataStr = formatarDataBR(dataObj);
+                            const chaveUnica = `${ano}-${String(mesIndex+1).padStart(2,'0')}-${String(d).padStart(2,'0')}_${codigo}`;
+
+                            if (mapaConsolidado.has(chaveUnica)) {
+                                mapaConsolidado.get(chaveUnica).necessidade += qtd;
+                            } else {
+                                mapaConsolidado.set(chaveUnica, {
+                                    dataObj: dataObj,
+                                    dataStr: dataStr,
+                                    codigo: codigo,
+                                    modelo: modelo,
+                                    necessidade: qtd
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            dadosProcessadosVertical = Array.from(mapaConsolidado.values());
+            aplicarOrdenacao();
+        }
+
+        /**
+         * SEQUÊNCIA DE PRODUÇÃO
+         * A produção termina um material antes de partir para outro. Por isso, dentro de cada dia:
+         *  1º  vem o código que estava sendo produzido no FIM do dia anterior (continuação);
+         *  2º  vêm os demais códigos que já apareciam no dia anterior;
+         *  3º  vêm os códigos que começam e terminam no próprio dia;
+         *  4º  por último, o código que CONTINUA no dia seguinte (para emendar na virada do dia).
+         *      Se houver mais de um candidato, prefere-se o que termina no dia seguinte,
+         *      deixando os itens de corrida longa para emendarem depois.
+         * A data continua sendo sempre o 1º critério (crescente).
+         */
+        function sequenciarProducao(itens) {
+            const porDia = new Map();
+            itens.forEach(it => {
+                const k = it.dataObj.getTime();
+                if (!porDia.has(k)) porDia.set(k, []);
+                porDia.get(k).push(it);
+            });
+
+            const dias = Array.from(porDia.keys()).sort((a, b) => a - b);
+            const codigosDia = dias.map(k => new Set(porDia.get(k).map(i => i.codigo)));
+
+            const resultado = [];
+            let ultimoCodigoAnterior = null;
+
+            dias.forEach((k, idx) => {
+                const lista = porDia.get(k);
+                const atual = codigosDia[idx];
+                const anterior = idx > 0 ? codigosDia[idx - 1] : new Set();
+                const proximo = idx < dias.length - 1 ? codigosDia[idx + 1] : new Set();
+                const depoisDoProximo = idx < dias.length - 2 ? codigosDia[idx + 2] : new Set();
+
+                // Primeiro do dia: continuação do último código do dia anterior
+                const primeiro = (ultimoCodigoAnterior && atual.has(ultimoCodigoAnterior)) ? ultimoCodigoAnterior : null;
+
+                // Último do dia: código que segue para o próximo dia
+                const candidatosUltimo = [...atual].filter(c =>
+                    proximo.has(c) && (atual.size === 1 || c !== primeiro)
+                );
+                candidatosUltimo.sort((a, b) => {
+                    const pa = depoisDoProximo.has(a) ? 1 : 0;
+                    const pb = depoisDoProximo.has(b) ? 1 : 0;
+                    if (pa !== pb) return pa - pb;
+                    return a.localeCompare(b);
+                });
+                const ultimo = candidatosUltimo.length ? candidatosUltimo[0] : null;
+
+                const peso = (c) => {
+                    if (c === primeiro) return 0;
+                    if (c === ultimo) return 3;
+                    if (anterior.has(c)) return 1;
+                    return 2;
+                };
+
+                lista.sort((a, b) =>
+                    (peso(a.codigo) - peso(b.codigo)) ||
+                    a.codigo.localeCompare(b.codigo) ||
+                    a.modelo.localeCompare(b.modelo)
+                );
+
+                resultado.push(...lista);
+                ultimoCodigoAnterior = lista[lista.length - 1].codigo;
+            });
+
+            return resultado;
+        }
+
+        function ordenarVerticalHeader(coluna) {
+            if (coluna === modoOrdenacao || (coluna === 'data' && modoOrdenacao === 'sequencia')) {
+                direcaoOrdenacao = direcaoOrdenacao === 'asc' ? 'desc' : 'asc';
+            } else {
+                modoOrdenacao = coluna === 'data' ? 'sequencia' : 'codigo';
+                direcaoOrdenacao = 'asc';
+            }
+            aplicarOrdenacao();
+        }
+
+        function aplicarOrdenacao() {
+            if (dadosProcessadosVertical.length === 0) {
+                renderizarTabelaVertical([]);
+                return;
+            }
+
+            if (modoOrdenacao === 'sequencia') {
+                dadosProcessadosVertical = sequenciarProducao(dadosProcessadosVertical);
+                if (direcaoOrdenacao === 'desc') dadosProcessadosVertical.reverse();
+            } else {
+                dadosProcessadosVertical.sort((a, b) => {
+                    let r = a.codigo.toLowerCase().localeCompare(b.codigo.toLowerCase());
+                    if (direcaoOrdenacao === 'desc') r = -r;
+                    if (r !== 0) return r;
+                    return a.dataObj.getTime() - b.dataObj.getTime();
+                });
+            }
+
+            renderizarTabelaVertical(dadosProcessadosVertical);
+            atualizarIconesOrdenacao();
+        }
+
+        function atualizarIconesOrdenacao() {
+            const iconData = document.getElementById('sortIconData');
+            const iconCodigo = document.getElementById('sortIconCodigo');
+            if (!iconData || !iconCodigo) return;
+
+            const ativo = direcaoOrdenacao === 'asc'
+                ? "fa-solid fa-sort-up text-indigo-600 text-xs font-bold"
+                : "fa-solid fa-sort-down text-indigo-600 text-xs font-bold";
+            const inativo = "fa-solid fa-sort text-slate-400 text-xs";
+
+            let statusTxt;
+            if (modoOrdenacao === 'sequencia') {
+                iconData.className = ativo;
+                iconCodigo.className = inativo;
+                statusTxt = `Ordenado por: DATA (${direcaoOrdenacao === 'asc' ? 'Crescente' : 'Decrescente'}) | 2º Critério: SEQUÊNCIA DE PRODUÇÃO (códigos agrupados na virada do dia)`;
+            } else {
+                iconCodigo.className = ativo;
+                iconData.className = inativo;
+                statusTxt = `Ordenado por: CÓDIGO (${direcaoOrdenacao === 'asc' ? 'A-Z' : 'Z-A'}) | 2º Critério: DATA (Crescente)`;
+            }
+            document.getElementById('statusResultadoVertical').innerText = statusTxt;
+        }
+
+        function formatarDataBR(date) {
+            const d = String(date.getDate()).padStart(2, '0');
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const y = date.getFullYear();
+            return `${d}/${m}/${y}`;
+        }
+
+        function renderizarTabelaVertical(dados) {
+            const tbody = document.getElementById('tbodyVertical');
+            tbody.innerHTML = '';
+
+            if (dados.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-10 text-center text-slate-400">Nenhum registro gerado (verifique se há dias úteis preenchidos na grade horizontal).</td></tr>`;
+                document.getElementById('statTotalLinhas').innerText = `Total de Registros: 0`;
+                document.getElementById('statTotalPecas').innerText = `Soma Geral Necessidade: 0 pçs`;
+                document.getElementById('btnExportar').disabled = true;
+                document.getElementById('statusResultadoVertical').innerText = `Processamento concluído: 0 registros.`;
+                return;
+            }
+
+            let somaTotal = 0;
+            let html = '';
+
+            dados.forEach((item, index) => {
+                somaTotal += item.necessidade;
+                const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-slate-50/60';
+                const novoDia = modoOrdenacao === 'sequencia' && index > 0 && dados[index - 1].dataStr !== item.dataStr;
+                html += `<tr class="${rowBg} hover:bg-slate-100/80 ${novoDia ? 'linha-novo-dia' : ''}">
+                    <td class="p-3 font-medium text-slate-700 text-center">${item.dataStr}</td>
+                    <td class="p-3 font-mono font-semibold text-indigo-700">${item.codigo}</td>
+                    <td class="p-3 text-slate-600">${item.modelo}</td>
+                    <td class="p-3 text-right font-semibold text-slate-800">${item.necessidade.toLocaleString('pt-BR')}</td>
+                    <td class="p-3 text-right text-slate-400 italic">Pendente</td>
+                </tr>`;
+            });
+
+            tbody.innerHTML = html;
+            document.getElementById('statTotalLinhas').innerText = `Total de Registros: ${dados.length}`;
+            document.getElementById('statTotalPecas').innerText = `Soma Geral Necessidade: ${somaTotal.toLocaleString('pt-BR')} pçs`;
+            document.getElementById('btnExportar').disabled = false;
+        }
+
+        function exportarCSV() {
+            if (dadosProcessadosVertical.length === 0) return;
+
+            let csvContent = "DATA;CÓDIGO;DESCRIÇÃO;NECESSIDADE;ENVIADO\n";
+            dadosProcessadosVertical.forEach(item => {
+                csvContent += `"${item.dataStr}";"${item.codigo}";"${item.modelo}";"${item.necessidade}";""\n`;
+            });
+
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Acompanhamento_Producao_Consolidado_${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        window.onload = function() {
+            renderizarGridHorizontal();
+            processarTransformacao();
+        };
+    </script>
+</body>
+</html>
